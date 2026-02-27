@@ -33,6 +33,7 @@ export async function POST(
     .createSignedUploadUrl(filePath)
 
   if (error || !data) {
+    console.error("[upload-url] Supabase storage error:", error)
     return NextResponse.json({ error: error?.message ?? "Failed to create upload URL" }, { status: 500 })
   }
 

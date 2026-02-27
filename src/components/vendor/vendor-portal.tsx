@@ -35,6 +35,7 @@ export function VendorPortal({ token, recipient, rfp, existingProposal, question
   const [notes, setNotes] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(!!existingProposal?.submitted_at)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -60,6 +61,7 @@ export function VendorPortal({ token, recipient, rfp, existingProposal, question
     if (!files.length && !existingProposal) return
 
     setSubmitting(true)
+    setSubmitError(null)
 
     try {
       // Upload each file directly to Supabase Storage using signed URLs
@@ -76,7 +78,10 @@ export function VendorPortal({ token, recipient, rfp, existingProposal, question
           body: JSON.stringify({ file_name: file.name, mime_type: file.type }),
         })
 
-        if (!urlRes.ok) throw new Error(`Failed to get upload URL for ${file.name}`)
+        if (!urlRes.ok) {
+          const body = await urlRes.json().catch(() => ({}))
+          throw new Error(body.error ?? `Failed to get upload URL for ${file.name}`)
+        }
         const { signed_url, file_path } = await urlRes.json()
 
         // Upload file directly to Supabase Storage (no size limit through our server)
@@ -108,8 +113,8 @@ export function VendorPortal({ token, recipient, rfp, existingProposal, question
       if (res.ok) {
         setSubmitted(true)
       }
-    } catch {
-      // silently fail — user can retry
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Upload failed. Please try again.")
     } finally {
       setUploadProgress(null)
       setSubmitting(false)
@@ -311,6 +316,12 @@ export function VendorPortal({ token, recipient, rfp, existingProposal, question
                   rows={3}
                 />
               </div>
+
+              {submitError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                  {submitError}
+                </p>
+              )}
 
               <Button
                 type="submit"
