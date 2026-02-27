@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, FileText, Upload, X } from "lucide-react"
 
 const CONSULTANT_LINE_ITEMS = [
   "Architectural",
@@ -50,8 +50,11 @@ export default function NewRfpPage() {
   const router = useRouter()
   const params = useParams()
   const projectId = params.id as string
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [loading, setLoading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
     title: "",
@@ -66,6 +69,15 @@ export default function NewRfpPage() {
 
   function update(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function addFiles(incoming: File[]) {
+    if (!incoming.length) return
+    setFiles((prev) => [...prev, ...incoming])
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -92,9 +104,27 @@ export default function NewRfpPage() {
     if (!res.ok) {
       setError(data.error ?? "Failed to create RFP")
       setLoading(false)
-    } else {
-      router.push(`/projects/${projectId}/rfps/${data.id}`)
+      return
     }
+
+    if (files.length > 0) {
+      const fd = new FormData()
+      files.forEach((file) => fd.append("files", file))
+
+      const uploadRes = await fetch(`/api/rfps/${data.id}/files`, {
+        method: "POST",
+        body: fd,
+      })
+
+      if (!uploadRes.ok) {
+        const uploadData = await uploadRes.json().catch(() => ({}))
+        setError(uploadData.error ?? "RFP created, but file upload failed")
+        setLoading(false)
+        return
+      }
+    }
+
+    router.push(`/projects/${projectId}/rfps/${data.id}`)
   }
 
   return (
@@ -176,6 +206,66 @@ export default function NewRfpPage() {
                 rows={3}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>RFP Documents</CardTitle>
+            <CardDescription>Upload plans, specs, or addenda to share with bidders.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOver(true)
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragOver(false)
+                addFiles(Array.from(e.dataTransfer.files))
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                dragOver ? "border-blue-400 bg-blue-50" : "border-slate-300 hover:border-slate-400 hover:bg-slate-50"
+              }`}
+            >
+              <Upload className="w-7 h-7 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-slate-700">Drop files here or click to browse</p>
+              <p className="text-xs text-slate-400 mt-1">PDF, DOCX, XLSX, images, and other common formats</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
+              />
+            </div>
+
+            {files.length > 0 && (
+              <div className="space-y-1.5">
+                {files.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    className="flex items-center justify-between p-2.5 bg-slate-50 rounded-md text-sm"
+                  >
+                    <span className="flex items-center gap-2 text-slate-700">
+                      <FileText className="w-3.5 h-3.5 text-slate-400" />
+                      {file.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index)}
+                      className="text-slate-400 hover:text-red-500"
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, ExternalLink, BarChart2 } from "lucide-react"
+import { ArrowLeft, BarChart2, Paperclip } from "lucide-react"
 import { formatDate, formatCurrency } from "@/lib/utils"
 import { RecipientsPanel } from "@/components/rfps/recipients-panel"
 import { RfpStatusActions } from "@/components/rfps/rfp-status-actions"
@@ -116,6 +116,29 @@ export default async function RfpPage({
             </Card>
           )}
         </div>
+      )}
+
+
+      {rfp.rfp_files?.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">RFP Documents</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {rfp.rfp_files.map((file: { id: string; file_name: string; file_path: string }) => (
+              <a
+                key={file.id}
+                href={`/api/files/${file.file_path}`}
+                className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+                {file.file_name}
+              </a>
+            ))}
+          </CardContent>
+        </Card>
       )}
 
       {/* Recipients */}
