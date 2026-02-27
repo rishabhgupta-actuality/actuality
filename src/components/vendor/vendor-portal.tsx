@@ -34,6 +34,7 @@ export function VendorPortal({ token, recipient, rfp, existingProposal, question
   const [totalFee, setTotalFee] = useState("")
   const [notes, setNotes] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(!!existingProposal?.submitted_at)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -60,21 +61,59 @@ export function VendorPortal({ token, recipient, rfp, existingProposal, question
 
     setSubmitting(true)
 
-    const fd = new FormData()
-    fd.append("token", token)
-    fd.append("total_fee", totalFee)
-    fd.append("notes", notes)
-    files.forEach((f) => fd.append("files", f))
+    try {
+      // Upload each file directly to Supabase Storage using signed URLs
+      const uploaded_files: Array<{ file_name: string; file_path: string; file_size: number; mime_type: string }> = []
 
-    const res = await fetch(`/api/vendor/${token}/upload`, {
-      method: "POST",
-      body: fd,
-    })
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setUploadProgress(`Uploading ${file.name} (${i + 1}/${files.length})…`)
 
-    if (res.ok) {
-      setSubmitted(true)
+        // Get a signed upload URL
+        const urlRes = await fetch(`/api/vendor/${token}/upload-url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file_name: file.name, mime_type: file.type }),
+        })
+
+        if (!urlRes.ok) throw new Error(`Failed to get upload URL for ${file.name}`)
+        const { signed_url, file_path } = await urlRes.json()
+
+        // Upload file directly to Supabase Storage (no size limit through our server)
+        const uploadRes = await fetch(signed_url, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        })
+
+        if (!uploadRes.ok) throw new Error(`Failed to upload ${file.name}`)
+
+        uploaded_files.push({
+          file_name: file.name,
+          file_path,
+          file_size: file.size,
+          mime_type: file.type,
+        })
+      }
+
+      setUploadProgress("Saving proposal…")
+
+      // Send only metadata to our API — no file blobs
+      const res = await fetch(`/api/vendor/${token}/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ total_fee: totalFee, notes, uploaded_files }),
+      })
+
+      if (res.ok) {
+        setSubmitted(true)
+      }
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setUploadProgress(null)
+      setSubmitting(false)
     }
-    setSubmitting(false)
   }
 
   async function sendQuestion(e: React.FormEvent) {
@@ -279,7 +318,7 @@ export function VendorPortal({ token, recipient, rfp, existingProposal, question
                 disabled={submitting || (!files.length)}
               >
                 {submitting ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> {uploadProgress ?? "Submitting…"}</>
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4" />
