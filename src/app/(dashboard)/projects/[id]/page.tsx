@@ -3,9 +3,9 @@ import { redirect, notFound } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, ArrowLeft, FileText, Users, CheckCircle, Clock, ChevronRight, MapPin, Ruler } from "lucide-react"
 import { formatDate, formatCurrency } from "@/lib/utils"
+import { ProjectDeleteButton } from "@/components/projects/project-delete-button"
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -56,12 +56,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               )}
             </div>
           </div>
-          <Link href={`/projects/${id}/rfps/new`}>
-            <Button>
-              <Plus className="w-4 h-4" />
-              New RFP
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <ProjectDeleteButton projectId={id} projectName={project.name} />
+            <Link href={`/projects/${id}/rfps/new`}>
+              <Button>
+                <Plus className="w-4 h-4" />
+                New RFP
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 
