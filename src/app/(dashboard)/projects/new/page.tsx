@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Upload, FileText, X } from "lucide-react"
 
 const BUILDING_TYPES = [
   "Mixed-Use", "Residential", "Commercial", "Industrial", "Office",
@@ -17,7 +17,12 @@ const BUILDING_TYPES = [
 
 export default function NewProjectPage() {
   const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [loading, setLoading] = useState(false)
+  const [extracting, setExtracting] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
     name: "",
@@ -28,6 +33,15 @@ export default function NewProjectPage() {
 
   function update(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  function addFiles(incoming: File[]) {
+    if (!incoming.length) return
+    setFiles((prev) => [...prev, ...incoming])
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -48,9 +62,34 @@ export default function NewProjectPage() {
     if (!res.ok) {
       setError(data.error ?? "Failed to create project")
       setLoading(false)
-    } else {
-      router.push(`/projects/${data.id}`)
+      return
     }
+
+    if (files.length > 0) {
+      setExtracting(true)
+      const fd = new FormData()
+      files.forEach((file) => fd.append("files", file))
+
+      const bootstrapRes = await fetch(`/api/projects/${data.id}/bootstrap-rfp`, {
+        method: "POST",
+        body: fd,
+      })
+
+      const bootstrapData = await bootstrapRes.json().catch(() => ({}))
+      setExtracting(false)
+      setLoading(false)
+
+      if (!bootstrapRes.ok) {
+        setError(bootstrapData.error ?? "Project created, but RFP extraction failed")
+        return
+      }
+
+      router.push(`/projects/${data.id}/rfps/${bootstrapData.rfp_id}`)
+      return
+    }
+
+    setLoading(false)
+    router.push(`/projects/${data.id}`)
   }
 
   return (
@@ -118,10 +157,68 @@ export default function NewProjectPage() {
                 />
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label>Optional: Upload RFP Document(s)</Label>
+              <p className="text-xs text-slate-500">
+                If you upload at least one PDF now, we&apos;ll create a draft RFP and auto-extract key details.
+              </p>
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragOver(true)
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDragOver(false)
+                  addFiles(Array.from(e.dataTransfer.files))
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                  dragOver ? "border-blue-400 bg-blue-50" : "border-slate-300 hover:border-slate-400 hover:bg-slate-50"
+                }`}
+              >
+                <Upload className="w-7 h-7 text-slate-400 mx-auto mb-2" />
+                <p className="text-sm font-medium text-slate-700">Drop files here or click to browse</p>
+                <p className="text-xs text-slate-400 mt-1">At least one PDF is required for extraction</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
+                />
+              </div>
+
+              {files.length > 0 && (
+                <div className="space-y-1.5">
+                  {files.map((file, index) => (
+                    <div
+                      key={`${file.name}-${index}`}
+                      className="flex items-center justify-between p-2.5 bg-slate-50 rounded-md text-sm"
+                    >
+                      <span className="flex items-center gap-2 text-slate-700">
+                        <FileText className="w-3.5 h-3.5 text-slate-400" />
+                        {file.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        className="text-slate-400 hover:text-red-500"
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </CardContent>
           <div className="px-6 pb-6 flex gap-3">
-            <Button type="submit" disabled={loading}>
-              {loading ? "Creating…" : "Create Project"}
+            <Button type="submit" disabled={loading || extracting}>
+              {extracting ? "Extracting RFP…" : loading ? "Creating…" : "Create Project"}
             </Button>
             <Link href="/projects">
               <Button type="button" variant="outline">Cancel</Button>
